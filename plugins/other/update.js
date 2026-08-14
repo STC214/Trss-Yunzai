@@ -1,6 +1,7 @@
 import cfg from "../../lib/config/config.js"
 import fs from "node:fs/promises"
 import { Restart } from "./restart.js"
+import { ensurePersistentWorkspaceBuildPolicy } from "../../lib/update/workspacePolicy.js"
 
 let uping = false
 
@@ -80,6 +81,8 @@ export class update extends plugin {
 
     uping = true
     await this.runUpdate(plugin)
+
+    if (!plugin) await this.restoreWorkspaceBuildPolicy()
 
     if (this.isPkgUp) await this.updatePackage()
     if (this.isUp) this.restart()
@@ -201,6 +204,7 @@ export class update extends plugin {
 
     uping = true
     await this.runUpdate()
+    await this.restoreWorkspaceBuildPolicy()
     for (let plugin of await fs.readdir("plugins")) {
       plugin = await this.getPlugin(plugin)
       if (plugin === false) continue
@@ -215,6 +219,18 @@ export class update extends plugin {
   async updatePackage() {
     await this.reply("开始更新依赖")
     return this.exec("pnpm install")
+  }
+
+  async restoreWorkspaceBuildPolicy() {
+    try {
+      if (await ensurePersistentWorkspaceBuildPolicy())
+        logger.mark(`${this.e.logFnc} 已恢复 pnpm 原生依赖构建许可`)
+      return true
+    } catch (error) {
+      logger.error(`${this.e.logFnc} 恢复 pnpm 原生依赖构建许可失败`, error)
+      await this.reply(`恢复 pnpm 原生依赖构建许可失败：${error.message}`)
+      return false
+    }
   }
 
   restart() {
