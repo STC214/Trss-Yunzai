@@ -1,5 +1,4 @@
 import Renderer from "../../../lib/renderer/Renderer.js"
-import os from "node:os"
 import lodash from "lodash"
 import puppeteer from "puppeteer"
 import { ulid } from "ulid"
@@ -9,8 +8,6 @@ import fs from "node:fs/promises"
 import cfg from "../../../lib/config/config.js"
 
 const _path = process.cwd()
-// mac地址
-let mac = ""
 
 export default class Puppeteer extends Renderer {
   constructor(config) {
@@ -67,13 +64,9 @@ export default class Puppeteer extends Renderer {
 
     let connectFlag = false
     try {
-      // 获取Mac地址
-      if (!mac) {
-        mac = await this.getMac()
-        this.browserMacKey = `Yz:chromium:browserWSEndpoint:${mac}`
-      }
-      // 是否有browser实例
-      const browserUrl = (await redis.get(this.browserMacKey)) || this.config.wsEndpoint
+      // 本地浏览器属于启动它的 Node 进程，重启后不能复用即将关闭的旧连接。
+      // 仅显式配置的外部浏览器允许跨进程连接。
+      const browserUrl = this.config.wsEndpoint
       if (browserUrl) {
         try {
           const browserWSEndpoint = await puppeteer.connect({ browserWSEndpoint: browserUrl })
@@ -84,13 +77,14 @@ export default class Puppeteer extends Renderer {
           }
           logger.info(`puppeteer Chromium 连接成功 ${browserUrl}`)
         } catch (err) {
-          await redis.del(this.browserMacKey)
+          logger.warn(`puppeteer Chromium 连接失败 ${browserUrl}`)
         }
       }
     } catch {}
 
     if (!this.browser || !connectFlag) {
-      let config = this.config
+      // 环境覆盖仅用于 Chromium 子进程，保留 HOME/字体等其余启动环境。
+      let config = { ...this.config, env: { ...process.env, ...this.config.env } }
       if (!config.userDataDir) {
         await fs.rm("temp/puppeteer", { force: true, recursive: true }).catch(() => {})
         config = { ...config, userDataDir: `temp/puppeteer/${ulid()}` }
@@ -114,11 +108,6 @@ export default class Puppeteer extends Renderer {
     }
     if (!connectFlag) {
       logger.info(`puppeteer Chromium 启动成功 ${this.browser.wsEndpoint()}`)
-      if (this.browserMacKey) {
-        // 缓存一下实例30天
-        const expireTime = 60 * 60 * 24 * 30
-        await redis.set(this.browserMacKey, this.browser.wsEndpoint(), { EX: expireTime })
-      }
     }
 
     /** 监听Chromium实例是否断开 */
@@ -127,35 +116,12 @@ export default class Puppeteer extends Renderer {
     return this.browser
   }
 
-  // 获取Mac地址
-  getMac() {
-    let mac = "00:00:00:00:00:00"
-    try {
-      const network = os.networkInterfaces()
-      let macFlag = false
-      for (const a in network) {
-        for (const i of network[a]) {
-          if (i.mac && i.mac !== mac) {
-            macFlag = true
-            mac = i.mac
-            break
-          }
-        }
-        if (macFlag) {
-          break
-        }
-      }
-    } catch (e) {}
-    mac = mac.replace(/:/g, "")
-    return mac
-  }
-
   /**
    * `chromium` 截图
    * @param name
    * @param data 模板参数
    * @param data.tplFile 模板路径，必传
-   * @param data.saveId  生成html名称，为空name代替
+   * @param data.saveId  生成html名称，未指定时使用name的最后一段
    * @param data.imgType  screenshot参数，生成图片类型：jpeg，png
    * @param data.quality  screenshot参数，图片质量 0-100，jpeg是可传，默认90
    * @param data.omitBackground  screenshot参数，隐藏默认的白色背景，背景透明。默认不透明
@@ -166,6 +132,11 @@ export default class Puppeteer extends Renderer {
    * @return img 不做segment包裹
    */
   async screenshot(name, data = {}) {
+    return Renderer.withTpl(name, data, () => this.captureScreenshot(name, data))
+  }
+
+  /** 执行已取得模板路径锁的截图 */
+  async captureScreenshot(name, data) {
     if (!(await this.browserInit())) return false
     const pageHeight = data.multiPageHeight || 4000
 

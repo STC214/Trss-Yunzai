@@ -429,6 +429,13 @@ Bot.adapter.push(
       )
     }
 
+    /** 获取频道 ID 列表，复用频道列表接口 */
+    async getGuildChannelList(data) {
+      const array = []
+      for (const { channel_id } of await this.getGuildChannelArray(data)) array.push(channel_id)
+      return array
+    }
+
     async getGuildChannelMap(data) {
       const map = new Map()
       for (const i of await this.getGuildChannelArray(data)) map.set(i.channel_id, i)
@@ -779,6 +786,38 @@ Bot.adapter.push(
       return data.bot.sendApi("delete_essence_msg", { message_id })
     }
 
+    async getGroupTodoList(data) {
+      Bot.makeLog("info", "获取群待办列表", `${data.self_id} => ${data.group_id}`, true)
+      const list =
+        (await data.bot.sendApi("get_group_todo_list", { group_id: data.group_id })).data || []
+      for (const i of list) if (i?.message) i.message = this.parseMsg(i.message)
+      return list
+    }
+
+    setGroupTodo(data, message_id) {
+      Bot.makeLog("info", `设置群待办：${message_id}`, `${data.self_id} => ${data.group_id}`, true)
+      return data.bot.sendApi("set_group_todo", {
+        group_id: data.group_id,
+        message_id,
+      })
+    }
+
+    completeGroupTodo(data, message_id) {
+      Bot.makeLog("info", `完成群待办：${message_id}`, `${data.self_id} => ${data.group_id}`, true)
+      return data.bot.sendApi("complete_group_todo", {
+        group_id: data.group_id,
+        message_id,
+      })
+    }
+
+    cancelGroupTodo(data, message_id) {
+      Bot.makeLog("info", `取消群待办：${message_id}`, `${data.self_id} => ${data.group_id}`, true)
+      return data.bot.sendApi("cancel_group_todo", {
+        group_id: data.group_id,
+        message_id,
+      })
+    }
+
     pickFriend(data, user_id) {
       const i = {
         ...data.bot.fl.get(user_id),
@@ -809,6 +848,7 @@ Bot.adapter.push(
         const guild_id = group_id.split("-")
         const i = {
           ...data,
+          group_id,
           guild_id: guild_id[0],
           channel_id: guild_id[1],
           user_id,
@@ -855,6 +895,7 @@ Bot.adapter.push(
         const i = {
           ...data.bot.gl.get(group_id),
           ...data,
+          group_id,
           guild_id: guild_id[0],
           channel_id: guild_id[1],
         }
@@ -871,7 +912,7 @@ Bot.adapter.push(
           getMemberArray: this.getGuildMemberArray.bind(this, i),
           getMemberList: this.getGuildMemberList.bind(this, i),
           getMemberMap: this.getGuildMemberMap.bind(this, i),
-          pickMember: this.pickMember.bind(this, i),
+          pickMember: this.pickMember.bind(this, i, group_id),
         }
       }
 
@@ -895,6 +936,10 @@ Bot.adapter.push(
         getChatHistory: this.getGroupMsgHistory.bind(this, i),
         getHonorInfo: this.getGroupHonorInfo.bind(this, i),
         getEssence: this.getEssenceMsg.bind(this, i),
+        getTodoList: this.getGroupTodoList.bind(this, i),
+        setTodo: this.setGroupTodo.bind(this, i),
+        completeTodo: this.completeGroupTodo.bind(this, i),
+        cancelTodo: this.cancelGroupTodo.bind(this, i),
         getMemberArray: this.getMemberArray.bind(this, i),
         getMemberList: this.getMemberList.bind(this, i),
         getMemberMap: this.getMemberMap.bind(this, i),
