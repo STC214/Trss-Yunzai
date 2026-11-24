@@ -46,6 +46,7 @@
     "yaml": "^2.9.1"
   },
   "devDependencies": {
+    "node-gyp-build": "4.8.4",
     "prettier": "^3.9.10"
   },
   "imports": {
