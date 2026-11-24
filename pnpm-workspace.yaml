@@ -16,6 +16,7 @@ allowBuilds:
   sharp: true
   skia-canvas: true
   protobufjs: false
+  onnxruntime-node: false
 onlyBuiltDependencies:
   - classic-level
   - log4js
