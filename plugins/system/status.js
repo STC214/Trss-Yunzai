@@ -89,10 +89,10 @@ export class status extends plugin {
           return ""
       }
     } else {
-      const d = moment()
+      let d = moment()
       for (let i = 0; i < 3; i++) {
         date.push(d.format("YYYY MM DD").split(" "))
-        d.add(-86400000)
+        d = d.subtract(1, "day")
       }
       date.push([d.format("YYYY"), d.format("MM")], [d.format("YYYY")], ["total"])
     }
